@@ -1,0 +1,33 @@
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const scoreVal = document.getElementById('scoreVal');
+const hpVal = document.getElementById('hpVal');
+const difficultyDisplay = document.getElementById('difficultyDisplay');
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+const mobileFireBtn = document.getElementById('mobileFireBtn');
+
+let score = 0, health = 100, isGameOver = false, gameStarted = false, gameTimer = 0, dangerLevel = 1.0;
+let bossActive = false, bossSpawnScoreThreshold = 100, bossProjectiles = [], lasers = [], aliens = [], stars = [], powerups = [], spawnTimeoutId = null;
+
+const boss = { x: 0, y: -100, width: 120, height: 60, hp: 100, maxHp: 100, speed: 3, direction: 1, lastShotTime: 0, fireRate: 800 };
+const player = { x: canvas.width / 2 - 25, y: canvas.height - 90, width: 50, height: 50, baseSpeed: 7, speed: 7 };
+const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+let isMobileFiring = false, lastLaserTime = 0, baseFireRate = 160, currentFireRate = 160, speedBoostTimer = 0, spreadShotTimer = 0;
+let audioCtx = null;
+
+function initAudioEngine() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playSoundEffect(type) {
+    if (!audioCtx) return; if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination); const now = audioCtx.currentTime;
+    if (type === 'laser') { osc.type = 'triangle'; osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(300, now + 0.08); gain.gain.setValueAtTime(0.08, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08); osc.start(now); osc.stop(now + 0.08); }
+    else if (type === 'boost_laser') { osc.type = 'square'; osc.frequency.setValueAtTime(1200, now); osc.frequency.exponentialRampToValueAtTime(600, now + 0.05); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05); osc.start(now); osc.stop(now + 0.05); }
+    else if (type === 'spread_laser') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(400, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.07); gain.gain.setValueAtTime(0.07, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07); osc.start(now); osc.stop(now+0.07); }
+    else if (type === 'boss_laser') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.15); gain.gain.setValueAtTime(0.12, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15); osc.start(now); osc.stop(now + 0.15); }
+    else if (type === 'explosion') { osc.type = 'sine'; osc.frequency.setValueAtTime(100, now); osc.frequency.exponentialRampToValueAtTime(20, now + 0.2); gain.gain.setValueAtTime(0.18, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2); osc.start(now); osc.stop(now + 0.2); }
+    else if (type === 'hit') { osc.type = 'square'; osc.frequency.setValueAtTime(70, now); gain.gain.setValueAtTime(0.12, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(now); osc.stop(now + 0.1); }
+    else if (type === 'powerup') { osc.type = 'sine'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(554, now + 0.06); osc.frequency.setValueAtTime(659, now + 0.12); osc.frequency.setValueAtTime(880, now + 0.18); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25); osc.start(now); osc.stop(now + 0.25); }
+}
